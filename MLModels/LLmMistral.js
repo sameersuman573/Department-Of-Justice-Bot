@@ -6,13 +6,12 @@ const llm = new MistralAI({
   apiKey: process.env.MISTRAL_API_KEY, // Add your API key here
   model: "codestral-latest",
   temperature: 0,
-  maxTokens: 30,
+  maxTokens: 1,
   maxRetries: 2,
-  verbose:true
   // other params...
 });
 
-const inputText = "What is the capital of India?";
+const inputText = "MistralAI is an AI company that ";
 
 async function run() {
   try {
