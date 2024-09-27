@@ -4,7 +4,7 @@
   "description": "",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "dev": "nodemon -r dotenv/config --experimental-json-modules src/index.js"
   },
   "keywords": [],
   "author": "",
@@ -14,12 +14,23 @@
     "@langchain/community": "^0.3.3",
     "@langchain/core": "^0.3.3",
     "@langchain/mistralai": "^0.1.1",
+    "@langchain/nomic": "^0.1.0",
     "@langchain/openai": "^0.3.2",
+    "@mendable/firecrawl-js": "^1.5.2",
     "cheerio": "^1.0.0",
+    "cookie-parser": "^1.4.6",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
+    "express": "^4.21.0",
     "langchain": "^0.3.2",
+    "mongoose": "^8.6.4",
     "node-fetch": "^3.3.2",
     "openai": "^4.63.0",
+    "ws": "^8.18.0",
     "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.7",
+    "prettier": "^3.3.3"
   }
 }

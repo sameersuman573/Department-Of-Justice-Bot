@@ -21,6 +21,15 @@ ${snippets.join("\n")}
 Please provide a concise summary in English.
 `;
 
+// Function to split text into chunks
+function splitText(text, chunkSize) {
+    const chunks = [];
+    for (let i = 0; i < text.length; i += chunkSize) {
+        chunks.push(text.slice(i, i + chunkSize));
+    }
+    return chunks;
+}
+
 async function main() {
     try {
         // Use SearchApiLoader to load web search results
@@ -30,7 +39,7 @@ async function main() {
             engine: "google",
             timeout: 50000,
             hl: 'en',
-            gl: 'us'
+            gl: 'in'
         });
 
         const docs = await loader.load();  // Load documents from SERP API
@@ -55,18 +64,32 @@ async function main() {
             return;
         }
 
-        // Format the input using the prompt template
-        const llmInput = promptTemplate(snippets);
-        console.log("Input to LLM:", llmInput);
+        // Combine all snippets into a single string
+        const combinedSnippets = snippets.join("\n");
 
-        // Generate summary using the LLM
-        const answer = await llm.invoke({ input: llmInput });
+        // Split the combined snippets into smaller chunks
+        const chunkSize = 1000;  // Define the chunk size
+        const chunks = splitText(combinedSnippets, chunkSize);
 
-        // Log the raw response from the LLM for debugging
-        console.log("LLM Response:", answer);
+        let combinedResponses = "";
 
-        // Print only the final summary
-        console.log("Final Summary:", answer);
+        // Process each chunk individually
+        for (let chunk of chunks) {
+            const llmInput = promptTemplate([chunk]);
+            console.log("Input to LLM:", llmInput);
+
+            // Generate summary using the LLM
+            const response = await llm.invoke({ input: llmInput });
+
+            // Log the raw response from the LLM for debugging
+            console.log("LLM Response:", response);
+
+            // Combine the responses
+            combinedResponses += response + "\n";
+        }
+
+        // Print only the final combined summary
+        console.log("Final Summary:", combinedResponses);
         
     } catch (error) {
         console.error("Error occurred during the web search:", error);
