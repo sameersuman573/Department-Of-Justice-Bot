@@ -2,16 +2,15 @@
 import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser";
- 
+import { corsOption } from "./config.js";
+
 
 // after writing this app will all properties of express 
 // app has now superpowers
 const app = express();
 
-app.use(cors({
-    origin: process.env.CORS_ORIGIN,
-    credentials:true
-})) 
+app.use(cors(corsOption))
+
 
 
 // Configuration for data fetching
