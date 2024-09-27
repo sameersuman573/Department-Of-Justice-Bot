@@ -16,7 +16,6 @@
     "@langchain/mistralai": "^0.1.1",
     "@langchain/nomic": "^0.1.0",
     "@langchain/openai": "^0.3.2",
-    "@mendable/firecrawl-js": "^1.5.2",
     "cheerio": "^1.0.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
