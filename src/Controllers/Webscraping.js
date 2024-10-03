@@ -1,168 +1,238 @@
 import { ChatMistralAI } from "@langchain/mistralai";
-import { ChatPromptTemplate } from "@langchain/core/prompts";
-// import { VoyageEmbeddings } from "@langchain/community/embeddings/voyage";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import * as dotenv from 'dotenv';
-import { CheerioWebBaseLoader } from "@langchain/community/document_loaders/web/cheerio";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { asyncHandler } from "../Utils/AsyncHandler.js";
-import { ApiResponse } from "../Utils/ApiResponse.js";
-import { ApiError } from "../Utils/ApiError.util.js";
+import {
+  ChatPromptTemplate,
+  MessagesPlaceholder,
+} from "@langchain/core/prompts";
+import * as dotenv from "dotenv";
+import "@mendable/firecrawl-js";
+import { FireCrawlLoader } from "@langchain/community/document_loaders/web/firecrawl";
+ import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
 import { NomicEmbeddings } from "@langchain/nomic";
+import { MemoryVectorStore } from "langchain/vectorstores/memory";
+import { createInterface } from "readline";
+import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+ dotenv.config();
+import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
+import { AIMessage, HumanMessage } from "@langchain/core/messages";
+import { createRetrieverTool } from "langchain/tools/retriever";
+import { Gram_nayalaya_URL } from "../KnowldegbaseLink/Gram_Nayalaya.js";
+import { asyncHandler } from "../Utils/AsyncHandler.js";
+import { ApiError } from "../Utils/ApiError.util.js";
+import { ApiResponse } from "../Utils/ApiResponse.js";
 
-dotenv.config();
 
-// Constant URL
-const URL = "https://doj.gov.in/";
+// Algorithm
 
-// Initialize ChatMistralAI
-const llm = new ChatMistralAI({
+// PART 1
+// 1. Lay the foundation with LLM , Searcheronweb , ChatPromptTemplate
+
+
+
+// PART 2 
+// 2. Now Initailize the Agent - It consist of 
+// Loader initialize 
+// splitter use - chunks 
+// Embeddings create
+// vector store save
+// Retriver create -> Then create a Retriver tool and this tool will be called by the agent 
+// So we have two tools 
+// 1. Search Tools
+// 2. LoadRetriver Tool
+
+
+// NOTE - i want to call the Initilaize agent only when i have queries regarding LoadRetriver otherwise i want to use Search tool
+
+
+// PART 3
+// 1. Now we will create a Agent Executor which will be executing a agent based on our question
+// 2. We have to give Description in the tools that when we want to use them so that they get called by the Tool calling agent
+// 3. Now we will Invoke our question so for that make a function
+// 4. Based on this we will have to Generate the ChatHistory of the user and the AI bot
+
+
+// PART 4 - Final
+// get the Question from the Frontend
+// Now Invoke the question in agent exector - based on the question it will call the necessary tool
+
+
+
+const LLM = new ChatMistralAI({
   model: "mistral-large-latest",
   apiKey: process.env.MISTRAL_API_KEY,
-  temperature: 0,
+  temperature: 1,
   maxRetries: 2,
-  maxTokens: 200,
+  maxTokens: 50,
 });
 
-// Initialize VoyageEmbeddings
-const embeddings = new NomicEmbeddings({
-  apiKey: process.env.NOMIC_API_KEY,
-  inputType: "document", // Specify input type
+
+const Searchtools = new TavilySearchResults({
+  maxResults: 2,
+  apiKey: process.env.TRAVERLY_SEARCH_KEY,
+  description: "use this too for searching queries given by the user",
 });
 
-// Initialize MemoryVectorStore
-const vectorStore = new MemoryVectorStore(embeddings);
 
-// Define a Chat Prompt Template
-const promptTemplate = ChatPromptTemplate.fromMessages([
-  ["system", "You are a helpful assistant that helps people in the Department of Justice to solve their queries regarding cases."],
-  ["human", "{input}"],
+const prompt = ChatPromptTemplate.fromMessages([
+  {
+    role: "system",
+    content: `
+    You are a Helpful Assistant designed to answer user queries based on the content provided. 
+
+    Instructions:
+    1. Use the **Loader_search** tool for questions specifically about Gram Nyayalaya.
+    2. For all other questions, use the **Searchtools** tool.
+    3. If you do not have an answer, respond with: 
+      "I do not know this answer." without any additional information.
+    
+    Context:
+    - Focus on being concise and informative .
+    - Prioritize the accuracy of the information provided.
+    - Example Responses:
+      - If asked "What is the number of operational Gram Nyayalayas in Punjab?", the response should be: "The number of operational Gram Nyayalayas in Punjab is 2."
+      - If the information is not available, respond with: "I do not know this answer."
+    `,
+  },
+  new MessagesPlaceholder("chat_history"),
+  {
+    role: "user",
+    content: "{input}",
+  },
+  new MessagesPlaceholder("agent_scratchpad"),
 ]);
 
-// Function to scrape content from a webpage using Cheerio
-async function scrapeContent(url) {
-  const loader = new CheerioWebBaseLoader(url, { selector: "p, h1, h2, h3" });
+
+let agent = null;
+let tools = null;
+let chatHistory = [];
+
+
+async function initializeAgent() {
   try {
-    const mainContent = await loader.load();
-    let combinedContent = mainContent.map(content => content.pageContent).join("\n");
-    return combinedContent;
+    const loader = new FireCrawlLoader({
+      url: Gram_nayalaya_URL, // The URL to scrape
+      apiKey: process.env.FIRECRAWL_API_KEY,
+      mode: "scrape",
+    });
+
+    const docs = await loader.load();
+    const firstDoc = [docs[0]];
+    console.log(firstDoc, "This is the metadata man");
+
+    const splitter = new RecursiveCharacterTextSplitter({
+      chunkSize: 200,
+      chunkOverlap: 20,
+    });
+    const SplitDocs = await splitter.splitDocuments(firstDoc);
+
+    const embeddings = new NomicEmbeddings({
+      apiKey: process.env.NOMIC_API_KEY,
+      inputType: "document",
+    });
+
+    const vectorStore = await MemoryVectorStore.fromDocuments(SplitDocs, embeddings);
+
+    const retriever = vectorStore.asRetriever({
+      k: 3, // Fetch the top 3 most relevant documents
+    });
+
+    const LoaderRetrieverTool = await createRetrieverTool(retriever, {
+      name: "Loader_search",
+      description: "Use this tool for searching information specifically about Number of Gram Nyayalaya Operational.",
+    });
+
+    tools = [Searchtools, LoaderRetrieverTool];
+
+    agent = createToolCallingAgent({
+      llm: LLM,
+      tools: tools,
+      prompt,
+    });
+
+    console.log("Agent initialized:", agent);
   } catch (error) {
-    console.error("Error loading webpage:", error);
-    return null;
+    console.error("Error initializing agent:", error);
   }
 }
 
-// Function to split content into chunks
-async function splitContent(content) {
-  const splitter = new RecursiveCharacterTextSplitter({
-    chunkSize: 500,
-    chunkOverlap: 200,
-  });
-  const res = await splitter.createDocuments([content]);
-  console.log(res);
-  return res;
-}
-
-// Function to add chunks to the vector store with retry logic
-async function addChunksToVectorStore(vectorStore, chunks) {
+async function invokeAgent(input) {
   try {
-    const texts = chunks
-      .map((chunk) => chunk.pageContent)
-      .filter((content) => typeof content === "string" && content.trim().length > 0);
+    const agentExecutor = new AgentExecutor({
+      agent: agent,
+      tools: tools,
+    });
 
-    console.log("Texts to add to vector store:", texts);
+    const response = await agentExecutor.invoke({
+      input: input,
+      chat_history: chatHistory, // Pass the chat history as context for the conversation
+    });
 
-    if (!texts || texts.length === 0) {
-      throw new Error("No valid text content found in chunks.");
-    }
+    console.log("Agent:", response.output);
 
-    const documents = texts.map(text => ({ pageContent: text }));
-    console.log("Documents to embed:", documents);
+    chatHistory.push(new HumanMessage(input));
+    chatHistory.push(new AIMessage(response.output)); // Add agent's response to history
 
-    // Retry logic for adding documents to the vector store
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const res = await vectorStore.addDocuments(documents);
-        console.log("Chunks successfully added to the vector store.", res);
-        return; // Exit after successful addition
-      } catch (error) {
-        console.error("Attempt failed, retrying...", error);
-        if (attempt === 2) throw error; // Throw error after last attempt
-      }
-    }
+    return response.output;
   } catch (error) {
-    console.error("Error adding chunks to vector store:", error);
+    console.error("Error invoking agent:", error.message);
+    throw error;
   }
 }
 
-// Function to search relevant chunks from vector store based on user query
-async function searchRelevantChunks(vectorStore, question) {
-  try {
-    const embed = await embeddings.embedQuery(question);
-    console.log("Query Embedding:", embed);
-    const res = await vectorStore.similaritySearch(question, 3);
-    return res.map(chunk => chunk.document);
-  } catch (error) {
-    console.error("Error in searching relevant chunks:", error);
-    return [];
-  }
-}
 
-// Function to generate a response using the LLM
-async function getAnswers(question, relevantChunks) {
-  const truncatedQuestion = question.slice(0, 200);
 
-  const formattedMessages = await promptTemplate.formatMessages({
-    input: `User's question: ${truncatedQuestion}\n\nHere is some relevant web content to help answer the question:\n${relevantChunks.join("\n")}\n\nPlease provide an answer based on this content.`,
-  });
+const handleQuery = asyncHandler(async(req , res , next) => {
 
-  try {
-    const res = await llm.invoke(formattedMessages);
-    return res;
-  } catch (error) {
-    console.error("Error invoking LLM:", error);
-    return "Sorry, I couldn't generate an answer.";
-  }
-}
+ 
+  const {question} = req.body;
 
-// Controller function to handle the query from the frontend
-const handleQuery = asyncHandler(async (req, res, next) => {
-  const { question } = req.body;
-
-  if (!question) {
-    throw new ApiError(400, "Question is required");
+  if(!question){
+    throw new ApiError(401 , "Question is Required")
   }
 
-  // Step 1: Scrape the content from the webpage
-  const scrapedData = await scrapeContent(URL);
-  console.log(scrapedData, "This is the scraped data");
+try {
+    const FinalRes = await invokeAgent(question);
 
-  // Step 2: If valid scraped data is found, proceed with further steps
-  if (scrapedData && scrapedData.length > 0) {
-    // Step 3: Split the scraped content into chunks
-    const chunks = await splitContent(scrapedData);
+    return res.json(new ApiResponse(200 , FinalRes , "The Answer Given by Bot is"))
+  
+} catch (error) {
+  throw new ApiError(401 , "Invoking Agent Did not run Final response")
+}  
+})
 
-    // Step 4: Add the chunks to the vector store
-    await addChunksToVectorStore(vectorStore, chunks);
+// async function handleQuery(req, res) {
 
-    // Step 5: Search relevant chunks based on the user's question
-    const relevantChunks = await searchRelevantChunks(vectorStore, question);
+//   const { question } = req.body;
 
-    if (relevantChunks.length > 0) {
-      // Step 6: Get answers based on the relevant chunks
-      const answer = await getAnswers(question, relevantChunks);
-      console.log(answer);
-      
-      return res.status(200).json(new ApiResponse(200, { answer }, "Answer generated successfully"));
-    } else {
-      throw new ApiError(404, "No relevant content found.");
-    }
-  } else {
-    throw new ApiError(404, "No content found from the webpage.");
-  }
-});
+//   if (!question) {
+//     return res.status(400).send({ error: 'Question is required' });
+//   }
 
-export {
+//   try {
+//     const response = await invokeAgent(question);
+//     res.send({ response });
+//   } catch (error) {
+//     res.status(500).send({ error: error.message });
+//   }
+// }
+
+initializeAgent();
+
+
+
+export{
   handleQuery
-};
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
 
