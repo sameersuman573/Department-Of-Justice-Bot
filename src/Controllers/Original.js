@@ -88,12 +88,7 @@
 
 // ])
 
-
-// const loader = new FireCrawlLoader({
-//     url: url, // The URL to scrape
-//     apiKey: process.env.FIRECRAWL_API_KEY,
-//     mode: "scrape",
-//   });
+ 
 
 //   const embeddings = new NomicEmbeddings({
 //     apiKey: process.env.NOMIC_API_KEY,
@@ -101,9 +96,18 @@
 //   });
 
 
-// async function InitializeAgent() {
+// async function InitializeAgent(url = Gram_nayalaya_URL) {
 
 // try {
+
+
+//   const loader = new FireCrawlLoader({
+//     url: url, // Use the passed URL or the default URL
+//     apiKey: process.env.FIRECRAWL_API_KEY,
+//     mode: "scrape",
+//   });
+
+  
 //         const LoadWebData = await loader.load(url)
 //         const Docs = [LoadWebData[0]]
 //         // The Split Documents split the docs in array format
@@ -126,7 +130,7 @@
     
 //         const LoadDataFromDeptofJustice = new createRetrieverTool(retriever , {
 //             name: "Loader_search",
-//             description: "Use this tool for searching information specifically about Number of Gram Nyayalaya Operational.",
+//             description: "Use this tool for searching information specifically about Number of Gram Nyayalaya .",
 //         })
     
 //         tools = [LoadDataFromDeptofJustice , Searchtools]
@@ -149,9 +153,8 @@
 
 
 
-// async function Agentexecutor(input) {
+// async function invokeAgent(input) {
 
-//     InitializeAgent();
 
 //    try {
 //      // There can be many new agents thus it will take a new 
@@ -161,15 +164,21 @@
 //      })
      
  
-//      const AnswerRes = await agentExecutor.invoke({
+//      const response = await agentExecutor.invoke({
 //         input:input,
 //         chat_history:chatHistory
-//      }) 
+// }) 
+
+// console.log(response.output);
+
+// chatHistory.push(new HumanMessage(input))
+// chatHistory.push(new AIMessage(response.output))
  
-//      return AnswerRes
-//    } catch (error) {
-//     throw new ApiError(401 , "The Agnet Executor Did not worked well")
-//    }
+//     return response.output;
+
+//   } catch (error) {
+//     throw new ApiError(401 , "The Agent Executor Did not worked well")
+//   }
 
 // }
 
@@ -177,24 +186,23 @@
 
 // const handleQuery = asyncHandler(async(req , res , next) => {
 
-//     try {
+ 
 //         const {question} = req.body
     
 //         if(!question){
 //             throw new ApiError(401 , "Please Give the Question")
 //         }
     
-    
-//         const FinalRes = await Agentexecutor.invoke(question);
-
-//         return res.json( new ApiResponse(200 , FinalRes , "The answer is here"))
-    
-//     } catch (error) {
-//         throw new ApiError(401 , "The Hanlde Query function did not run ")
-//     }
-    
+//         try {
+//           const FinalRes = await invokeAgent(question);
+//           return res.json(new ApiResponse(200, FinalRes, "The Answer Given by Bot is"));
+//         } catch (error) {
+//           throw new ApiError(401, "Invoking Agent Did not run Final response");
+//         }
+        
 // })
 
+// InitializeAgent();
 
 // export {
 //     handleQuery
