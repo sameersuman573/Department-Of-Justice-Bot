@@ -1,26 +1,3 @@
-import { ChatMistralAI } from "@langchain/mistralai";
-import {
-  ChatPromptTemplate,
-  MessagesPlaceholder,
-} from "@langchain/core/prompts";
-import * as dotenv from "dotenv";
-import "@mendable/firecrawl-js";
-import { FireCrawlLoader } from "@langchain/community/document_loaders/web/firecrawl";
-import { Document } from "@langchain/core/documents";
-import { createStuffDocumentsChain } from "langchain/chains/combine_documents";
-import { createRetrievalChain } from "langchain/chains/retrieval";
-import { PuppeteerWebBaseLoader } from "@langchain/community/document_loaders/web/puppeteer";
-import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
-import { NomicEmbeddings } from "@langchain/nomic";
-import { MemoryVectorStore } from "langchain/vectorstores/memory";
-import { createInterface } from "readline";
-import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
-import readline from 'readline';
-dotenv.config();
-import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
-import { AIMessage, HumanMessage } from "@langchain/core/messages";
-import {createRetrieverTool} from "langchain/tools/retriever"
-import {Gram_nayalaya_URL} from "./src/KnowldegbaseLink/Gram_Nayalaya.js"
 
 const LLM = new ChatMistralAI({
   model: "mistral-large-latest",
@@ -42,10 +19,10 @@ const prompt = ChatPromptTemplate.fromMessages([
     1. Use the **Loader_search** tool for questions specifically about Gram Nyayalaya.
     2. For all other questions, use the **Searchtools** tool.
     3. If you do not have an answer, respond with: 
-       "I do not know this answer." without any additional information.
+      "I do not know this answer." without any additional information.
     
     Context:
-    - Focus on being concise and informative.
+    - Focus on being concise and informative .
     - Prioritize the accuracy of the information provided.
     - Example Responses:
       - If asked "What is the number of operational Gram Nyayalayas in Punjab?", the response should be: "The number of operational Gram Nyayalayas in Punjab is 2."
@@ -64,92 +41,108 @@ const prompt = ChatPromptTemplate.fromMessages([
 const Searchtools = new TavilySearchResults({
   maxResults: 2,
   apiKey: process.env.TRAVERLY_SEARCH_KEY,
-  description:"use this too for searching queries given by the user"
+  description: "use this too for searching queries given by the user",
 });
 
-
-  // -----------------------------------------------------
+// -----------------------------------------------------
 // CHAT WITH A PARTICULAR KNOWLEDGE BASE
-  // -----------------------------------------------------
+// -----------------------------------------------------
 
-    // Now load the Data from web and make it usable
+// Now load the Data from web and make it usable
 
-    // LOADER---------
-    
-const loader = new FireCrawlLoader({
-  url: Gram_nayalaya_URL, // The URL to scrape
-  apiKey: process.env.FIRECRAWL_API_KEY,
-  mode: "scrape", 
-  // AT LAST DO IT CRAWL
-  // For API documentation, visit https://docs.firecrawl.dev
- });
+// LOADER---------
 
 
+// This InitializingAgent is used to setup agent with the necessary tools and configuration
+async function InitializingAgent() {
 
+  const loader = new FireCrawlLoader({
+    url: Gram_nayalaya_URL, // The URL to scrape
+    apiKey: process.env.FIRECRAWL_API_KEY,
+    mode: "scrape",
+    // AT LAST DO IT CRAWL
+    // For API documentation, visit https://docs.firecrawl.dev
+  });
 
-  const docs = await loader.load()
+  const docs = await loader.load();
   // console.log(docs , "This is the result docs");
 
+  const firstDoc = [docs[0]];
+  console.log(firstDoc, "This is the metadata man");
 
-  const firstDoc = [docs[0]]
-  console.log(firstDoc , "This is the metadata man");
-  
-
-
-  // Now Split the Documents 
+  // Now Split the Documents
   const splitter = new RecursiveCharacterTextSplitter({
-      chunkSize:200,
-      chunkOverlap:20
-  })
-  const SplitDocs = await splitter.splitDocuments(firstDoc)
+    chunkSize: 200,
+    chunkOverlap: 20,
+  });
+  const SplitDocs = await splitter.splitDocuments(firstDoc);
 
-
-  // Now create embeddings 
+  // Now create embeddings
   const embeddings = new NomicEmbeddings({
-      apiKey: process.env.NOMIC_API_KEY,
-      inputType: "document",
-  })
+    apiKey: process.env.NOMIC_API_KEY,
+    inputType: "document",
+  });
 
-// Correctly create the vector store from documents
-const vectorStore = await MemoryVectorStore.fromDocuments(SplitDocs, embeddings);
-
+  // Correctly create the vector store from documents
+  const vectorStore = await MemoryVectorStore.fromDocuments(
+    SplitDocs,
+    embeddings,
+  );
 
   // RETRIEVER
   const retriever = vectorStore.asRetriever({
-      k: 3, // Fetch the top 3 most relevant documents
+    k: 3, // Fetch the top 3 most relevant documents
+  });
+
+  // -----------------------------------------------------
+  // End
+  // -----------------------------------------------------
+
+  const LoaderRetrieverTool = await createRetrieverTool(retriever, {
+    name: "Loader_search",
+    description:
+      "Use this tool for searching information specifically about Number of Gram Nyayalaya Operational.",
   });
 
 
-    // -----------------------------------------------------
-// End
-  // -----------------------------------------------------
 
-  const LoaderRetrieverTool = await createRetrieverTool(retriever ,{
-    name:"Loader_search",
-    description: "Use this tool for searching information specifically about Number of Gram Nyayalaya Operational."
-  })
+  const tools = [Searchtools, LoaderRetrieverTool];
 
-const tools = [ Searchtools, LoaderRetrieverTool ];
+  const agent = createToolCallingAgent({
+    llm: LLM,
+    tools,
+    prompt,
+  });
 
-const agent = createToolCallingAgent({
-  llm: LLM,
-  tools,
-  prompt,
-});
+  return { agent , tools};
+}
 
-const agentExecutor = new AgentExecutor({
-  agent,
-  tools,
-});
 
-const chatHistory = [];
+// Example usage
+InitializingAgent().then(async ({agent , tools}) => {
+  // Use the agent here
+  console.log("Agent initialized:", agent);
 
-const initialResponse = await agentExecutor.invoke({
-  input: "Hello",
-  chat_history: chatHistory,
-});
 
-console.log("Agent:", initialResponse.output);
+  // now the returned agent is passed to the Agent executor 
+  const agentExecutor = new AgentExecutor({
+    agent,
+    tools,
+  });
+
+  const chatHistory = [];
+
+
+  // Bot has Introduced itself ans have started working
+  const initialResponse = await agentExecutor.invoke({
+    input: "Hello",
+    chat_history: chatHistory,
+  });
+
+
+  console.log("Agent:", initialResponse.output);
+
+
 
 const r1 = createInterface({
   input: process.stdin,
@@ -164,19 +157,43 @@ const AskQuestion = () => {
       return;
     }
 
-    const response = await agentExecutor.invoke({
+
+
+    try {
+      const response = await agentExecutor.invoke({
         input: input,
         chat_history: chatHistory, // Pass the chat history as context for the conversation
       });
 
-console.log("Agent" , response.output);
+      console.log("Agent", response.output);
 
-    chatHistory.push(new HumanMessage(input));
-    chatHistory.push(new AIMessage(response.output)); // Add agent's response to history
- 
+      chatHistory.push(new HumanMessage(input));
+      chatHistory.push(new AIMessage(response.output)); // Add agent's response to history
+  
+} catch (error) {
+  console.error("Error invoking agent:", error.message); // Handle any errors
+}
 
-    AskQuestion();
-  });
-};
 
 AskQuestion();
+
+});
+};
+
+
+AskQuestion();
+
+
+}).catch(error => {
+  console.error("Error initializing agent:", error);
+});
+
+
+
+
+
+
+
+
+
+
