@@ -11,6 +11,8 @@ import { NomicEmbeddings } from "@langchain/nomic";
 import { MemoryVectorStore } from "langchain/vectorstores/memory";
 import { createInterface } from "readline";
 import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+import { ExaSearchResults } from "@langchain/exa";
+import Exa from "exa-js";
 dotenv.config();
 import { AgentExecutor, createToolCallingAgent } from "langchain/agents";
 import { AIMessage, HumanMessage } from "@langchain/core/messages";
@@ -49,7 +51,7 @@ const urls = [
   {
     url: "https://dashboard.doj.gov.in/gn/operational_gram_nyayalaya",
     description:
-      "Description of Number Of Operational Gram Nyayalaya in States",
+      "Number Of Operational Gram Nyayalaya in States",
   },
   {
     url: "https://dashboard.doj.gov.in/gn/pendency_criminal",
@@ -71,7 +73,7 @@ const LLM = new ChatMistralAI({
   apiKey: process.env.MISTRAL_API_KEY,
   temperature: 1,
   maxRetries: 2,
-  maxTokens: 350,
+  maxTokens: 500,
 });
 
 
@@ -79,7 +81,7 @@ const LLM = new ChatMistralAI({
     apiKey: process.env.NOMIC_API_KEY,
     inputType: "question"
   });
- 
+
 
 const embeddingGenerator = new NomicEmbeddings({
   apiKey: process.env.NOMIC_API_KEY,
