@@ -3,6 +3,7 @@ import {
   ChatPromptTemplate,
   MessagesPlaceholder,
 } from "@langchain/core/prompts";
+import {Document} from "../Model/Docs.model.js"
 import * as dotenv from "dotenv";
 import "@mendable/firecrawl-js";
 import { FireCrawlLoader } from "@langchain/community/document_loaders/web/firecrawl";
@@ -21,7 +22,17 @@ import { asyncHandler } from "../Utils/AsyncHandler.js";
 import { ApiError } from "../Utils/ApiError.util.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import { tool } from "@langchain/core/tools";
-
+import { MongoDBAtlasVectorSearch } from "@langchain/mongodb";
+import { MongoClient } from "mongodb";
+import { Embeddings } from "@langchain/core/embeddings";
+import {embeddingGenerator} from "../EmbeddingModel/embeddingGenerator.js"
+import {urls} from "../KnowldegbaseLink/url.js"
+import {EmbeddQuestion} from "../EmbeddingModel/EmbeddQuestion.js"
+import {Searchtools} from "../Tools/SearchTool.js"
+import {prompt} from "../PromptTemplates/BotPrompt.js"
+import {LLM} from "../MLModels/MistralModel.js"
+import { getMongoClient, getCollection, getVectorstore } from '../Db/index.db.js';
+import {ConnectDB} from "../Db/index.db.js"
 // Part 1
 //  Initialize the Chat llm , WebSearcher , prompt message
 
@@ -38,55 +49,48 @@ import { tool } from "@langchain/core/tools";
 // Now will make a function in which the agent will be given the question
 // Therefore it will execute those question by calling the agent Executor
 
-const urls = [
-  {
-    url: "https://www.tele-law.in/national-legal-services-authority.html",
-    description: "Information about National Legal Services Authority(NALSA)",
-  },
-  {
-    url: "https://dashboard.doj.gov.in/gn/fund_released",
-    description:
-      "Fund Released By Department Of justice for Gram Nyayalaya (Rs in Lakhs)",
-  },
-  {
-    url: "https://dashboard.doj.gov.in/gn/operational_gram_nyayalaya",
-    description:
-      "Number Of Operational Gram Nyayalaya in States",
-  },
-  {
-    url: "https://dashboard.doj.gov.in/gn/pendency_criminal",
-    description: "Description of the number of cases pending in Gram Nyayalaya",
-  },
-  {
-    url: "https://dashboard.doj.gov.in/gn/introduction",
-    description: "Description and features of About  Gram Nyayalaya ",
-  },
-];
+
+
+
+
+// ------------------------------------------------------------
+// const embeddingGenerator = new NomicEmbeddings({
+//   apiKey: process.env.NOMIC_API_KEY,  // Use your Nomic API key
+//   inputType: "document",  // Ensure the input type is "document" for embedding documents
+// });
+
+
+
+let mongoClient;
+let collection ;
+let vectorstore ;
+
+// let collection = await getCollection()
+
+( async() => {
+  try {
+    await ConnectDB(); // Ensure this is called to establish the connection
+    mongoClient = await getMongoClient();
+    collection = await getCollection(); // specify your collection name
+    vectorstore = await getVectorstore(); // Ensure this is set up correctly too
+  } catch (error) {
+    console.error('Error initializing MongoDB connection:', error);
+  }
+})()
+
+
+
+
+
+
+
 
 let Agent = null;
 let tools = null;
 let currentURL = null;
 let chatHistory = [];
 
-const LLM = new ChatMistralAI({
-  model: "mistral-large-latest",
-  apiKey: process.env.MISTRAL_API_KEY,
-  temperature: 1,
-  maxRetries: 2,
-  maxTokens: 500,
-});
 
-
-   const EmbeddQuestion = new NomicEmbeddings({
-    apiKey: process.env.NOMIC_API_KEY,
-    inputType: "question"
-  });
-
-
-const embeddingGenerator = new NomicEmbeddings({
-  apiKey: process.env.NOMIC_API_KEY,
-  inputType: "document",
-});
 
 async function cosineSimilarity(a, b) {
   const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
@@ -114,31 +118,39 @@ async function SelectMostRelevantURL(question) {
   return bestURL;
 }
 
-const Searchtools = new TavilySearchResults({
-  maxResults: 2,
-  apiKey: process.env.TRAVERLY_SEARCH_KEY,
-  description: "use this too for searching queries given by the user",
-});
 
-const prompt = ChatPromptTemplate.fromMessages([
-  {
-    role: "system",
-    content: `
-    You are a helpuful assistant Who answer user queries
-    1. If the question is about Gram Nyayalaya, determine the most relevant URL from the list provided.
-    2. Use the corresponding loader tool to fetch the data.
-    3. For any other queries, use the general search tool.
-    `,
-  },
-  new MessagesPlaceholder("chat_history"),
-  {
-    role: "user",
-    content: "{input}",
-  },
 
-  // ONE OF THE MOST IMPORTANT THING - IT IS USED TO MANAGE THE CONTEXT OF THE CONVERSATION
-  new MessagesPlaceholder("agent_scratchpad"),
-]);
+
+
+
+async function InsertDocuments(SplitDocs) {
+  // 1. Generate Embeddings for each document for its ageContent
+  // 2. Now save the New document having page content and its embedding
+  // 3. Then Add in the Collection
+try {
+    
+    for(const doc of SplitDocs ){
+      const embedding = await embeddingGenerator.embedQuery(doc.pageContent);
+
+      const docWithEmbedding = {
+        pageContent:doc.pageContent,
+        embedding:embedding
+      }
+
+
+      await collection.insertOne(docWithEmbedding)
+      console.log(`Document with content '${doc.pageContent.slice(0, 30)}...' added to vector store.`);
+    }
+
+
+    console.log("All documents have been added to the vector store.");
+
+} catch (error) {
+  console.error(`There Was An error adding the documenst ${error.message}`)
+  throw new ApiError(500, `Error adding documents: ${error.message}`);
+}
+}
+
 
 
 
@@ -157,18 +169,21 @@ async function InitializeAgent(url) {
     // The Split Documents split the docs in array format
 
     const TextSplitter = new RecursiveCharacterTextSplitter({
-      chunkSize: 200,
-      chunkOverlap: 20,
+      chunkSize: 300,
+      chunkOverlap: 30,
     });
 
     const splitDocs = await TextSplitter.splitDocuments(Docs);
 
     // Embedding creation will be done while saving the data in docs
+    const AddDocToVectorstore = await InsertDocuments(splitDocs);
 
-    const vectorstore = await MemoryVectorStore.fromDocuments(
-      splitDocs,
-      embeddingGenerator,
-    );
+
+    // const vectorstore = await MemoryVectorStore.fromDocuments(
+    //   splitDocs,
+    //   embeddingGenerator,
+    // );
+
 
     const retriever = vectorstore.asRetriever({
       k: 3,
@@ -180,6 +195,8 @@ async function InitializeAgent(url) {
       description:
         "Use this tool for retrieving information from the relevant URL.",
     });
+
+
 
     tools = [LoadDataFromDeptofJustice, Searchtools];
 
@@ -197,14 +214,14 @@ async function InitializeAgent(url) {
   }
 }
 
+
 async function invokeAgent(input) {
   try {
     const relevantURL = await SelectMostRelevantURL(input);
 
     if (!Agent || relevantURL != currentURL) {
       console.log("Re-initializing agent for the new URL:", relevantURL);
-      const res = await InitializeAgent(relevantURL);
-      console.log(res, "The InitializeAgent is ");
+      const res = await InitializeAgent(relevantURL,input);
       currentURL = relevantURL;
     }
 
@@ -249,5 +266,11 @@ const handleQuery = asyncHandler(async (req, res, next) => {
     throw new ApiError(401, "Invoking Agent Did not run Final response");
   }
 });
+
+
+
+
+
+
 
 export { handleQuery };
