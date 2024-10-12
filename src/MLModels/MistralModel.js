@@ -8,5 +8,5 @@ export const LLM = new ChatMistralAI({
     apiKey: process.env.MISTRAL_API_KEY,
     temperature: 0.5,
     maxRetries: 2,
-    maxTokens: 50,
+    maxTokens:150,
   }); 
