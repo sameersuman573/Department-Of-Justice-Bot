@@ -11,6 +11,7 @@ export const prompt = ChatPromptTemplate.fromMessages([
       1. If the question is about Gram Nyayalaya, determine the most relevant URL from the list provided.
       2. Use the corresponding loader tool to fetch the data.
       3. For any other queries, use the general search tool.
+      at last you must write source: and provide the source link within <a class="text-blue-400"></a> tag.
       `,
     },
     new MessagesPlaceholder("chat_history"),
