@@ -16,8 +16,7 @@ const asyncHandler = (requestHandler) => {
          .catch((err) => next(err))
          // Promise.resolve().catch() -> just add callbacks in each part   
 
-         // for Standeriaztion of api error and api response - read documentataion node.js api error 
-     }
+    }
  }
  
  
