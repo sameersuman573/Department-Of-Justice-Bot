@@ -1,19 +1,25 @@
+import {ConnectDB} from "./Db/index.db.js";
 import dotenv from "dotenv";
-import { app } from "./app.js";
-
-// Load environment variables from the .env file
+import { httpServer } from "./app.js"; 
 dotenv.config({
-    path: './.env'
+path: "./.env",
 });
 
-// Global error listener before the app listens on the port
-app.on("error", (err) => {
-    console.log("The app has some error before the app listens on the port", err);
-    process.exit(1);
-});
+// global way to listen to error before the app listens
+// app.on("error", (err) => {
+//     console.log("The app has error before the app listens the port", err);
+//   });
+  
+// Basic syntax to connect to the database and listen to the port
+// ConnectDB().then().catch()
 
-// Start the server
-const port = process.env.PORT || 8000;
-app.listen(port, () => {
-    console.log(`Server is running at PORT ${port}`);
-});
+ConnectDB()
+  .then(() => {
+    httpServer.listen(process.env.PORT || 8000, () => {
+      console.log(`server is running at PORT ${process.env.PORT || 8000}`);
+    });
+  })
+  .catch((err) => {
+    console.log("MONGODB CONNECTION FAILURE !!!!", err);
+    process.exit(1); // Exit if MongoDB connection fails
+  });

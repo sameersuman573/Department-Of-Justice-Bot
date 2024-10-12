@@ -3,11 +3,11 @@ import express from "express"
 import cors from "cors"
 import cookieParser from "cookie-parser";
 import { corsOption } from "./config.js";
+import { createServer } from "http";
 
-
-// after writing this app will all properties of express 
-// app has now superpowers
 const app = express();
+const httpServer = createServer(app);
+
 
 app.use(cors(corsOption))
 
@@ -24,34 +24,15 @@ app.use(express.static("public"))
 app.use(cookieParser())
 
 
-// app.use((req, res, next) => {
-//     console.log(`${req.method} ${req.url}`);
-//     next();
-// });
 
 
 
-// ROUTES
-
-// Algorithm
-// 1. write middleware
-// 2. whenever any user will go /users then control will go to userRoute and userRoute contains register
-// example URL -> https://localhost:8000/api/v1/users/register
-
-
-
- import WebBot from "./Routes/WebBot.js"
+import WebBot from "./Routes/WebBot.js"
 
 app.use('/api/v1/Bot' , WebBot);
 
 
-// app.use((req, res, next) => {
-//     console.log(`Unhandled request: ${req.method} ${req.url}`);
-//     res.status(404).send('Not Found');
-// })
 
 
-
-
-export {app}
+export {app , httpServer}
 
