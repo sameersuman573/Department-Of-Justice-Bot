@@ -18,7 +18,7 @@
     "@langchain/mongodb": "^0.1.0",
     "@langchain/nomic": "^0.1.0",
     "@langchain/openai": "^0.3.7",
-    "@mendable/firecrawl-js": "^0.0.36",
+    "@mendable/firecrawl-js": "^0.0.13",
     "cheerio": "^1.0.0",
     "cookie-parser": "^1.4.6",
     "cors": "^2.8.5",
