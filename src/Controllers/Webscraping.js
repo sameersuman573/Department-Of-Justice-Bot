@@ -33,6 +33,8 @@ import {prompt} from "../PromptTemplates/BotPrompt.js"
 import {LLM} from "../MLModels/MistralModel.js"
 import { getMongoClient, getCollection, getVectorstore } from '../Db/index.db.js';
 import {ConnectDB} from "../Db/index.db.js"
+import { marked } from "marked";
+import {filterDoc} from "../Utils/Filter.util.js"
 // Part 1
 //  Initialize the Chat llm , WebSearcher , prompt message
 
@@ -165,8 +167,16 @@ async function InitializeAgent(url) {
     });
 
     const LoadWebData = await loader.load();
-    const Docs = [LoadWebData[0]];
+    // const Docs = [LoadWebData[0]];
     // The Split Documents split the docs in array format
+
+    let doc = LoadWebData[0];
+
+    // Apply the filterDoc function to clean the page content
+    const filteredContent = filterDoc(doc.pageContent);
+    doc.pageContent = filteredContent;
+
+    const Docs = [doc];
 
     const TextSplitter = new RecursiveCharacterTextSplitter({
       chunkSize: 300,
@@ -215,6 +225,19 @@ async function InitializeAgent(url) {
 }
 
 
+function formatAsBulletPoints(text) {
+  // Split the text by periods, new lines, or semicolons to create bullet points
+  const sentences = text
+    .split(/[\.\n;]/)
+    .map(sentence => sentence.trim())
+    .filter(sentence => sentence.length > 0);
+
+  // Join sentences with bullet points
+  return sentences.map(sentence => `- ${sentence}`).join('\n');
+}
+
+
+
 async function invokeAgent(input) {
   try {
     const relevantURL = await SelectMostRelevantURL(input);
@@ -237,11 +260,14 @@ async function invokeAgent(input) {
     });
 
     console.log(response.output);
+    const formattedResponse = formatAsBulletPoints(response.output);
+
 
     chatHistory.push(new HumanMessage(input));
     chatHistory.push(new AIMessage(response.output));
 
-    return response.output;
+    // return response.output;
+    return formattedResponse;
   } catch (error) {
     console.error(`Error invoking agent: ${error.message}`);
     throw new ApiError(401, `The Agent failed to invoke: ${error.message}`);
